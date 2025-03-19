@@ -214,7 +214,7 @@ def server(input, output, session):
     @reactive.event(input.go)
     def chat_container():
         return [
-            chat.ui()
+            ui.chat_ui("chat")
         ]
 
 

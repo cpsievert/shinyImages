@@ -1,106 +1,8 @@
 from shiny import App, reactive, render, ui
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.chat_history import InMemoryChatMessageHistory
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from chatlas import ChatOpenAI, content_image_url
 
 from card import parse_to_card
-
-model = ChatOpenAI(model="gpt-4o")
-
-def llm_prompt(style, n_words):
-    if style != "":
-        description_style = f"IMPORTANT: This whole response should be written in the style of {style}."
-    else:
-        description_style = ""
-
-    image_prompt = f"""
-    You are ImageAnalyzerGPT. {description_style} 
-
-    You have a number of distinct tasks to complete about this image.
-
-    Task 1: title
-    A short title for this image.
-
-    Task 1: description
-    Your task is to describe images in detail. 
-    Use as much detail as possible, describing the foreground, background, and subjects in the image. 
-    Use as much descriptive language as possible. 
-    This description should be as long as is necessary to fully describe the image.
-    This description must be about {n_words * 1.5} tokens long. 
-
-    Task 1: descriptive tags
-    Your task is to tag images in detail. Use as many tags as possible and make the tags descriptive. Additionally add in fun conceptual tags for social media.
-
-    Task 1: social media tags
-    Your task is to add fun conceptual tags about this image for social media.
-
-    Task 1: composition
-    Your task is to comment on the photographic composition
-
-    Task 1: location
-    Try to determine the location. Include an estimation of your confidence.
-
-    Task 1: process
-    Comment on if this is a digital photo or a analog film photo. 
-
-    Task 1: photographer
-    Who is the photographer of this image?
-
-    The YAML should be structured like this:
-
-    ```
-    title: Fancy Title
-    description: |
-      This image has a cat sitting on a chair. 
-      
-      In the foreground there are balls of yarn and in the background many books.
-    descriptive_tags:
-      - lighthouse
-      - tall structure
-      - white building
-      - foggy morning
-      - mist
-      - stone edifice
-      - windows
-      - crimson dome
-      - iron lattice
-      - beacon
-      - sentinel
-      - grassy field
-      - wildflowers
-      - dew
-      - solitude
-      - vigilance
-    social_media_tags:
-      - LighthouseLife
-      - FoggyMornings
-      - BeaconOfHope
-      - SolitudeInNature
-      - MistyMystery
-      - GuidingLight
-      - SereneScenes
-    composition: |
-      The cat is off to one side. The leading lines of the chair's 
-      legs draw attention to the cat
-    location: |
-      This photograph is from Iceland, outside of Vik.
-    photographer: Dorothea Lange
-    process: |
-      This image appears to be a digital photograph. These are some of the reasons why: ...
-    ```
-
-    IMPORTANT: Return the result as YAML in a Markdown code block surrounded with three backticks!
-    """
-
-    prompt = ChatPromptTemplate.from_messages(
-    [
-        SystemMessage(image_prompt),
-        MessagesPlaceholder(variable_name="messages"),
-    ]
-    )
-    return prompt
+from prompt import llm_prompt
 
 
 app_ui = ui.page_sidebar(
@@ -146,70 +48,55 @@ app_ui = ui.page_sidebar(
             ),
             style="display: flex; flex-direction: column; height: calc(100vh - 40px - 40px); justify-content: space-between;"
         ),
-        ui.div(id = "card_container", style = "display: grid; grid-template-columns: 1fr;"),
+        ui.div(id="card_container", style="display: grid; grid-template-columns: 1fr;"),
         col_widths={"sm": (12), "lg": (6)},
     ),
-    title = "Image Describer",
+    title="Image Describer",
 )
+
 
 def server(input, output, session):
     chat = ui.Chat("chat")
-    client = None
+    chat_client = ChatOpenAI(model="gpt-4o")
 
-    @output
+    @reactive.effect
+    def _():
+        chat_client.system_prompt = llm_prompt(input.style(), input.n_words())
+
     @render.ui
     def display_image():
         return ui.img(src=input.url(), style="max-height: 50vh; display: flex; justify-content: center; align-items: center; overflow: hidden;")
 
     def update_card(chunk, output):
-        output.append(chunk.content)
+        output.append(chunk)
         # try to update the card, but don't update if there's a parsing error
         try:
             card_update = parse_to_card("".join(output))
-            ui.insert_ui(card_update, "#card_container", immediate = True)
-            ui.remove_ui(selector = "#card_container > div:not(:last-child)", immediate = True)
+            ui.insert_ui(card_update, "#card_container", immediate=True)
+            ui.remove_ui(selector="#card_container > div:not(:last-child)", immediate=True)
         except ValueError:
             pass
-        return chunk.content
+        return chunk
 
     @reactive.effect
     @reactive.event(input.go)
     async def start_chat():
-        prompt = llm_prompt(input.style(), input.n_words())
-
-        # Start a new conversation
-        history = InMemoryChatMessageHistory()
-        nonlocal client
-        client = RunnableWithMessageHistory(prompt | model, lambda: history)
         card_output = []
-
-        user_prompt = HumanMessage(
-            content=[
-                {
-                    "type": "text",
-                    "text": "Describe this image",
-                },
-                {"type": "image_url", "image_url": {"url": input.url()}},
-            ]
+        stream = await chat_client.stream_async(
+            "Describe this image",
+            content_image_url(input.url())
         )
-
-        stream = client.astream(user_prompt)
-        
         stream2 = (update_card(chunk, card_output) async for chunk in stream)
         await chat.append_message_stream(stream2)
 
     # Allow the user to ask follow up questions
     @chat.on_user_submit
-    async def _():
-        print(chat.user_input())
-        user_message = HumanMessage(content=chat.user_input())
+    async def _(user_input: str):
         card_output = []
-        stream = client.astream(user_message)
-
+        stream = await chat_client.stream_async(user_input)
         stream2 = (update_card(chunk, card_output) async for chunk in stream)
         await chat.append_message_stream(stream2)
-            
-    @output
+
     @render.ui
     @reactive.event(input.go)
     def chat_container():

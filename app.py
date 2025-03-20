@@ -36,9 +36,9 @@ app_ui = ui.page_sidebar(
         "chat_offcanvas",
         "Refine image description",
         ui.output_ui("chat_container"),
-    ).add_class("ms-auto"),
+    ),
     ui.layout_columns(
-        ui.output_ui("image_container", fill=True, fillable=True),
+        ui.output_ui("image_container"),
         ui.output_ui("card_container", fill=True, fillable=True),
         col_widths={"sm": (12), "lg": (6)},
     ),
@@ -62,7 +62,7 @@ def server(input, output, session):
 
     @render.ui
     def image_container():
-        return ui.img(src=input.url(), class_="html-fill-item rounded")
+        return ui.img(src=input.url())
     
     @render.ui
     def card_container():

@@ -114,7 +114,7 @@ def server(input, output, session):
         if input.describe() == 0:
             return "A chat will appear here once there is a description"
         else:
-            return ui.chat_ui("chat", messages=["**Hi!** Tell me how I can help refine the description."])
+            return ui.chat_ui("chat", messages=["**Hi!** Tell me how I can help refine the description.\n\n"])
 
  
 app = App(app_ui, server, static_assets=Path(__file__).parent / "www")

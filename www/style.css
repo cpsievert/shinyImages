@@ -1,0 +1,10 @@
+.card-header p { 
+  margin-bottom: 0; 
+}
+
+.offcanvas-container {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 1;
+}

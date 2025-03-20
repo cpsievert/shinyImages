@@ -15,10 +15,9 @@ class ImageDetails(TypedDict):
     photographer: str
 
 
-def extract_image_details(answer: str) -> ImageDetails:
+def extract(answer: str) -> ImageDetails:
     """
-    Given an answer, which is details about an image in YAML format, returns an image card, which is
-    a Shiny UI element (which is essentially HTML).
+    Given an the LLM response, extract details about an image in YAML format.
 
     This function can handle the answer in its partial forms as it streams in.
     """
@@ -36,7 +35,7 @@ def extract_image_details(answer: str) -> ImageDetails:
         return {}
 
 
-def image_details_ui(x: ImageDetails):
+def card_body_ui(x: ImageDetails):
     "Image details UI for the card *body*."
 
     result = ui.TagList()

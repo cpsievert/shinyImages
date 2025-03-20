@@ -3,8 +3,10 @@ from pathlib import Path
 from shiny import App, reactive, render, ui
 from chatlas import ChatOpenAI, content_image_url
 
-from card import extract_image_details, image_details_ui
+import image_details
 from prompt import llm_prompt
+from offcanvas import offcanvas_ui
+import icons
 
 app_ui = ui.page_sidebar(
     ui.sidebar(
@@ -16,37 +18,34 @@ app_ui = ui.page_sidebar(
         ui.input_text(
             "style",
             "In the style of",
-            value="Shakespeare",
+            placeholder="e.g., Hemingway, Jane Austen, etc.",
         ),
         ui.input_numeric(
             "n_words",
             "Description word limit",
             value=100,
         ),
-        ui.input_task_button("go", "Describe Image"),
-    ),
-    ui.layout_sidebar(
-        ui.sidebar(
-            ui.output_ui("chat_container"),
-            open="closed",
-            position="right",
+        ui.input_action_button(
+            "describe",
+            "Describe Image",
+            class_="btn btn-primary",
+            icon=icons.pencil_square,
         ),
-        ui.layout_columns(
-            ui.output_ui("image_container", fill=True, fillable=True),
-            ui.output_ui("card_container", fill=True, fillable=True),
-            col_widths={"sm": (12), "lg": (6)},
-        ),
-        id="chat_sidebar",
-        fill=True,
-        padding="3rem",
-        border=False
     ),
-    ui.tags.style(".card-header p { margin-bottom: 0; }"),
+    offcanvas_ui(
+        "chat_offcanvas",
+        "Refine image description",
+        ui.output_ui("chat_container"),
+    ).add_class("ms-auto"),
+    ui.layout_columns(
+        ui.output_ui("image_container", fill=True, fillable=True),
+        ui.output_ui("card_container", fill=True, fillable=True),
+        col_widths={"sm": (12), "lg": (6)},
+    ),
+    ui.tags.link(rel="stylesheet", href="style.css"),
     ui.tags.script(src="keypress.js"),
     fillable=True,
-    # TODO: padding doesn't work here?!
-    padding=0,
-    title="Image Describer",
+    title="AI Assisted Image Describer",
 )
 
 
@@ -67,7 +66,7 @@ def server(input, output, session):
     
     @render.ui
     def card_container():
-        if input.go() == 0:
+        if input.describe() == 0:
             return ui.card(
                 {"class": "text-muted"},
                 "No description yet (press 'Enter')"
@@ -89,14 +88,15 @@ def server(input, output, session):
             async with card_title.stream_context() as title:
                 async for chunk in stream:
                     all_content += chunk
-                    deats = extract_image_details(all_content)
-                    await title.replace(deats.get("title"))
-                    await body.replace(image_details_ui(deats))
+                    details = image_details.extract(all_content)
+                    await title.replace(details.get("title"))
+                    await body.replace(image_details.card_body_ui(details))
                     yield chunk
 
+    # Start/update description
     @reactive.effect
-    @reactive.event(input.go)
-    async def start_chat():
+    @reactive.event(input.describe)
+    async def _():
         stream = await chat_client.stream_async(
             "Describe this image",
             content_image_url(input.url())
@@ -111,14 +111,10 @@ def server(input, output, session):
 
     @render.ui
     def chat_container():
-        if input.go() == 0:
+        if input.describe() == 0:
             return "A chat will appear here once there is a description"
         else:
-            return ui.chat_ui("chat")
-        
-    @reactive.effect
-    def _():
-        ui.update_sidebar(id="chat_sidebar", show=input.go() % 2 == 1)
+            return ui.chat_ui("chat", messages=["**Hi!** Tell me how I can help refine the description."])
 
  
 app = App(app_ui, server, static_assets=Path(__file__).parent / "www")

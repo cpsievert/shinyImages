@@ -1,18 +1,21 @@
-import re, yaml
+import re
+import yaml
 
 from typing import TypedDict
 from shiny import ui
 
+
 class ImageDetails(TypedDict):
     title: str
     description: str
-    descriptive_tags: list[str] 
-    social_media_tags: list[str] 
+    descriptive_tags: list[str]
+    social_media_tags: list[str]
     composition: str
     process: str
-    photographer: str        
+    photographer: str
 
-def parse_to_card(answer: str) -> ui.TagChild:
+
+def extract_image_details(answer: str) -> ImageDetails:
     """
     Given an answer, which is details about an image in YAML format, returns an image card, which is
     a Shiny UI element (which is essentially HTML).
@@ -25,93 +28,83 @@ def parse_to_card(answer: str) -> ui.TagChild:
     try:
         image_details = yaml.safe_load(txt.replace("#", ""))
     except yaml.YAMLError:
-        # If unable to parse the YAML, do a req(False, cancel_output=True), which throws
-        # a SilentException; if an output function raises this exception, Shiny will
-        # leave the output unchanged from its previous state.
-        # req(False, cancel_output=True)
-        raise ValueError
+        pass
+    
+    if isinstance(image_details, dict):
+        return image_details
+    else:
+        return {}
 
-    if image_details is None:
-        raise ValueError
-    if not isinstance(image_details, dict):
-        # Sometimes at the very beginning the YAML parser will return a string, but to
-        # create a card, we need a dictionary.
-        raise ValueError
 
-    return update_card(image_details)
+def image_details_ui(x: ImageDetails):
+    "Image details UI for the card *body*."
 
-def update_card(image_details: ImageDetails) -> ui.TagChild:
-    title = None
-    if "title" in image_details:
-        title = ui.card_header(
-            {"class": "bg-dark fw-bold fs-3"},
-            image_details["title"],
+    result = ui.TagList()
+
+    descriptive_tags = x.get("descriptive_tags") or []
+    social_media_tags = x.get("social_media_tags") or []
+    tags = descriptive_tags + social_media_tags
+    if tags:
+        tags_ui = ui.div(
+            {"class": "mb-3"},
+            *(
+                ui.TagList(ui.span({"class": "badge bg-secondary"}, i), " ")
+                for i in tags
+            )
         )
+        result.append(tags_ui)
 
-    tags = None
-    if "descriptive_tags" in image_details and image_details["descriptive_tags"]:
-        tags = ui.div({"class": "mb-3"})
-        for descriptive_tags in image_details["descriptive_tags"]:
-            tags.append(ui.span({"class": "badge bg-secondary"}, descriptive_tags), " ")
+    result.append(ui.tags.ul({"class": "ps-0"}))
 
-    if "social_media_tags" in image_details and image_details["social_media_tags"]:
-        for social_media_tag in image_details["social_media_tags"]:
-            tags.append(ui.span({"class": "badge bg-primary"}, social_media_tag), " ")            
+    description = x.get("description")
+    composition = x.get("composition")
+    location = x.get("location")
+    photographer = x.get("photographer")
+    process = x.get("process")
 
-    details = ui.tags.ul({"class": "ps-0"})
-
-    if "description" in image_details and image_details["description"] is not None:
-        desc_list = []
-        for line in image_details["description"].split("\n"):
-            desc_list.append(ui.tags.p(line))
-
-        details.append(
+    if description:
+        result.append(
             ui.tags.div(
                 {"class": "list-group-item pb-1"},
                 ui.span({"class": "fw-bold"}, "Description: "),
-                *desc_list,
+                ui.markdown(description)
             )
         )
 
-    if "composition" in image_details:
-        details.append(
+    if composition:
+        result.append(
             ui.tags.div(
                 {"class": "list-group-item pb-1"},
                 ui.span({"class": "fw-bold"}, "Composition: "),
-                ui.tags.p(image_details["composition"]),
+                ui.markdown(composition)
             )
         )
 
-    if "location" in image_details:
-        details.append(
+    if location:
+        result.append(
             ui.tags.div(
                 {"class": "list-group-item pb-1"},
                 ui.span({"class": "fw-bold"}, "Location: "),
-                ui.tags.p(image_details["location"]),
+                ui.markdown(location)
             )
         )
 
-    if "photographer" in image_details:
-        details.append(
+    if photographer:
+        result.append(
             ui.tags.div(
                 {"class": "list-group-item pb-1"},
                 ui.span({"class": "fw-bold"}, "Photographer: "),
-                ui.tags.p(image_details["photographer"]),
+                ui.markdown(photographer)
             )
         )
 
-    if "process" in image_details:
-        details.append(
+    if process:
+        result.append(
             ui.tags.div(
                 {"class": "list-group-item pb-1"},
                 ui.span({"class": "fw-bold"}, "Process: "),
-                ui.tags.p(image_details["process"]),
+                ui.markdown(process)
             )
         )
 
-    return ui.card(
-        title,
-        tags,
-        details,
-        style = "grid-row-start: 1; grid-column-start: 1;"
-    )
+    return result

@@ -1,4 +1,4 @@
 pyyaml
-shiny
+shiny @ git+https://github.com/posit-dev/py-shiny@markdown-stream-context
 python-dotenv
 chatlas[openai]
